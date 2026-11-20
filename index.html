@@ -302,7 +302,7 @@ async function authSubmit(mode){
   const res = mode==="up" ? await sb.auth.signUp({email, password}) : await sb.auth.signInWithPassword({email, password});
   if(res.error){
     const m = res.error.message||"";
-    $("#auth-msg").textContent = /Invalid login/i.test(m) ? "Неверная почта или пароль." : /not confirmed/i.test(m) ? "Почта ещё не подтверждена. Открой письмо от Supabase и нажми ссылку." : "Ошибка: "+m;
+    $("#auth-msg").textContent = /Invalid login/i.test(m) ? "Неверная почта или пароль." : /not confirmed/i.test(m) ? "Почта ещё не подтверждена. Открой письмо от Supabase и нажми ссылку." : /rate limit/i.test(m) ? "Слишком много писем за час. Аккаунт уже создан: подтверди почту по первому письму или подожди час." : /already registered/i.test(m) ? "Такой аккаунт уже есть. Нажми «Войти»." : "Ошибка: "+m;
     return;
   }
   if(mode==="up" && !res.data.session){ $("#auth-msg").textContent = "Готово. Подтверди почту по ссылке из письма, потом нажми «Войти»."; return; }
