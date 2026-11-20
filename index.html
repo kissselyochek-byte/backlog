@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10131a">
+<title>Разгрузка бэклога</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+/* Layout: one narrow reading column — the original doc order on top, tools as a compact bar, blocks as lists */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --fg:#161a24; --muted:#636b7d; --line:#dfe2ea;
+  --accent:#3457e0; --accent-soft:#e3e9ff; --done:#1f8a5b; --done-soft:#dcf2e6; --main:#b4610f; --main-soft:#fbead6;
+  --f-display:"Unbounded",system-ui,sans-serif; --f-body:"Golos Text",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10131a; --surface:#181c26; --fg:#e8ebf2; --muted:#8c94a7; --line:#272c3a;
+  --accent:#7d97ff; --accent-soft:#222c4d; --done:#4cc68d; --done-soft:#17322a; --main:#f0a14d; --main-soft:#3a2a17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10131a; --surface:#181c26; --fg:#e8ebf2; --muted:#8c94a7; --line:#272c3a;
+  --accent:#7d97ff; --accent-soft:#222c4d; --done:#4cc68d; --done-soft:#17322a; --main:#f0a14d; --main-soft:#3a2a17; color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:680px;margin:0 auto;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1{font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.15;margin:4px 0 0;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:500;font-size:17px;margin:10px 0 0}
+h3{font-family:var(--f-display);font-weight:500;font-size:14px;margin:0;letter-spacing:.02em}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.dates{display:flex;flex-direction:column;gap:4px;color:var(--muted)}
+.dates label{display:flex;gap:8px;align-items:center}
+.dates input{font:inherit;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:6px;padding:2px 6px}
+.dates input:hover,.dates input:focus{border-color:var(--line)}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.stat b{display:block;font-family:var(--f-mono);font-size:20px;font-weight:500}
+.stat span{font-size:12px;color:var(--muted)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--done);border-radius:3px;transition:width .3s}
+
+.month{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.month-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.month-head small{color:var(--muted)}
+.mchart{display:flex;gap:6px;align-items:flex-end;height:74px;overflow-x:auto}
+.mcol{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 34px;font-size:11px;color:var(--muted)}
+.mcol .v{font-family:var(--f-mono);color:var(--fg)}
+.mcol .b{width:20px;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+.mcol.cur .b{background:var(--done)}
+.empty-note{font-size:13px;color:var(--muted)}
+
+.now{background:var(--accent-soft);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.now small{color:var(--muted);display:block;font-size:12px}
+.now strong{font-weight:600}
+
+.tools{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;display:flex;flex-direction:column;gap:8px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.search{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.search:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chip{flex:0 0 auto;font:inherit;font-size:13px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.block{display:flex;flex-direction:column;gap:4px}
+.block-head{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+.block-head small{color:var(--muted);font-size:12px}
+.sub{font-weight:600;font-size:13px;color:var(--main);margin:6px 0 0}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.g{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:7px 8px;border-radius:8px;cursor:pointer}
+.g:hover{background:var(--surface)}
+.g.main-dish{background:var(--main-soft)}
+.g .chk{width:22px;height:22px;border-radius:6px;border:2px solid var(--muted);display:grid;place-items:center;background:none;padding:0;cursor:pointer;color:var(--bg)}
+.g.done .chk{background:var(--done);border-color:var(--done)}
+.g .name{min-width:0}
+.g .t{display:block}
+.g.done .t{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted)}
+.g .meta{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.g .num{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.tag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.tag.playing{background:var(--accent);color:var(--surface)}
+.tag.dated{background:var(--done-soft);color:var(--done)}
+.swapped-from{font-size:12px;color:var(--muted);text-decoration:line-through}
+
+.plain p{margin:6px 0;color:var(--fg)}
+.plain .lbl{color:var(--muted)}
+.done-list{display:flex;flex-direction:column;gap:2px;margin:6px 0 10px}
+.dl{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 8px;border-radius:8px;cursor:pointer}
+.dl:hover{background:var(--surface)}
+.dl .name{min-width:0}
+.dl .meta{font-size:12px;color:var(--muted)}
+.tag.extra{background:var(--main-soft);color:var(--main)}
+.add-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.add-form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.add-form .grow{flex:1 1 200px}
+.add-form input{font:inherit;font-size:14px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
+.add-form .hrs{width:80px}
+.now.pick{flex-direction:column;align-items:stretch;gap:4px}
+.pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.pick-btn{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;text-align:left}
+.pick-btn:hover{border-color:var(--accent)}
+.pick-btn span{color:var(--muted);font-family:var(--f-mono);font-size:11px;margin-left:6px}
+.pick-note{font-size:12px;color:var(--muted)}
+.g.locked .t{color:var(--muted)}
+.g.avail .t{font-weight:500}
+.nores{color:var(--muted);padding:20px 0;text-align:center}
+
+/* sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(10,12,18,.45);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--surface);border-radius:16px 16px 0 0;max-height:82%;overflow:auto;
+  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;max-width:680px;margin:0 auto}
+.sheet h3{font-size:17px}
+.sheet .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-size:14px;padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ok{background:var(--done);border-color:var(--done);color:#fff}
+.sheet input[type=date]{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.sheet .muted{color:var(--muted);font-size:13px}
+.save-state{font-size:12px;color:var(--muted);text-align:center}
+.auth{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
+.auth form{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px}
+.auth h2{margin:0 0 4px}
+.auth p{margin:0;color:var(--muted);font-size:14px}
+.auth input{font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.auth .row{display:flex;gap:8px}
+.auth .row .btn{flex:1}
+.auth-msg{min-height:1.4em;font-size:13px;color:var(--muted)}
+.foot{display:flex;flex-direction:column;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.foot .acct{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.linkbtn{font:inherit;font-size:12px;background:none;border:none;color:var(--accent);cursor:pointer;padding:4px}
+.io{width:100%}
+.io summary{cursor:pointer;text-align:center}
+.io textarea{width:100%;min-height:90px;font:12px var(--f-mono);border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:8px;margin-top:8px}
+.io .row{display:flex;gap:8px;justify-content:center;margin-top:6px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Разгрузка бэклога</h1>
+  </header>
+  <div class="dates">
+    <label>Начал: <input type="date" id="start-date"></label>
+    <label>Закончил: <input type="date" id="finish-date"></label>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="bar"><i id="bar"></i></div>
+  <div id="now-box"></div>
+  <section class="month" id="month"></section>
+
+  <div class="tools">
+    <input class="search" id="q" type="search" placeholder="Поиск по названию" autocomplete="off">
+    <div class="chips" id="chips-status"></div>
+    <div class="chips" id="chips-cat"></div>
+  </div>
+
+  <h2>Очередь</h2>
+  <div id="queue"></div>
+
+  <section class="plain" id="bench-sec">
+    <h2>Скамейка запасных</h2>
+    <div id="bench"></div>
+  </section>
+  <section class="plain" id="past-sec">
+    <h2>Уже пройдено</h2>
+    <div class="done-list" id="done-list"></div>
+    <form class="add-form" id="add-form" autocomplete="off">
+      <label class="grow" for="add-title">Пройдено вне очереди
+        <input id="add-title" list="bench-dl" placeholder="Название игры" required></label>
+      <label for="add-date">Дата<input id="add-date" type="date" required></label>
+      <label for="add-hrs">Часы<input id="add-hrs" class="hrs" type="number" min="0" step="1" placeholder="—"></label>
+      <button class="btn primary" type="submit">Добавить</button>
+      <datalist id="bench-dl"></datalist>
+    </form>
+  </section>
+  <div class="foot">
+    <div class="save-state" id="save-state"></div>
+    <div class="acct" id="account" hidden><span id="account-email"></span><button class="linkbtn" id="sign-out" type="button">Выйти</button></div>
+    <details class="io">
+      <summary>Перенос прогресса</summary>
+      <textarea id="io-text" aria-label="Прогресс в виде текста" placeholder="Сюда вставляется прогресс из старой версии"></textarea>
+      <div class="row"><button class="btn" id="export-btn" type="button">Скопировать мой прогресс</button><button class="btn primary" id="import-btn" type="button">Загрузить из текста</button></div>
+      <div class="auth-msg" id="io-msg"></div>
+    </details>
+  </div>
+</div>
+<div class="auth" id="auth" hidden>
+  <form id="auth-form" autocomplete="on">
+    <h2>Разгрузка бэклога</h2>
+    <p>Войди, чтобы прогресс был одинаковым на всех устройствах.</p>
+    <input id="auth-email" type="email" placeholder="Почта" autocomplete="email" required>
+    <input id="auth-pass" type="password" placeholder="Пароль (от 6 символов)" autocomplete="current-password" required>
+    <div class="row"><button class="btn primary" type="submit">Войти</button><button class="btn" id="auth-signup" type="button">Создать аккаунт</button></div>
+    <div class="auth-msg" id="auth-msg"></div>
+  </form>
+</div>
+<div id="sheet-root"></div>
+
+<script>
+/* ---------- queue: loaded from queue.json, so edits in the repo show up without a new APK ---------- */
+let BLOCKS = [], BENCH = {}, DEV = {}, GAMES = [], byId = {};
+const MONTHS = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+const MONTHS_FULL = ["январе","феврале","марте","апреле","мае","июне","июле","августе","сентябре","октябре","ноябре","декабре"];
+
+function buildCatalog(q){
+  BLOCKS = q.blocks || []; BENCH = q.bench || {}; DEV = q.devices || {};
+  GAMES = []; let n = 0;
+  BLOCKS.forEach((b,bi)=>{
+    (b.games||[]).forEach(g=>{ n++; GAMES.push({id:g.id, num:n, title:g.title, h:+g.h||0, dev:g.dev, block:bi, main:false}); });
+    if(b.main) GAMES.push({id:b.main.id, num:null, title:b.main.title, h:+b.main.h||0, dev:b.main.dev, block:bi, main:true});
+  });
+  byId = Object.fromEntries(GAMES.map(g=>[g.id,g]));
+  if(q.title){ document.title = q.title; const h=document.querySelector("h1"); if(h) h.textContent = q.title; }
+}
+async function loadQueue(){
+  try{
+    const r = await fetch("queue.json?t="+Date.now(), {cache:"no-store"});
+    if(!r.ok) throw new Error(r.status);
+    const q = await r.json();
+    try{ localStorage.setItem("backlog_queue", JSON.stringify(q)); }catch(e){}
+    return q;
+  }catch(e){
+    try{ return JSON.parse(localStorage.getItem("backlog_queue")||"null"); }catch(_){ return null; }
+  }
+}
+
+let state = {done:{}, playing:null, swaps:{}, start:"", finish:"", extras:[]};
+const filters = {q:"", status:"all", cat:"all"};
+
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const today = ()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const fmtDate = s=>{ if(!s) return ""; const [y,m,d]=s.split("-"); return +d+" "+MONTHS[+m-1]+(y!=String(new Date().getFullYear())?" "+y:""); };
+const titleOf = g=> state.swaps[g.id] || g.title;
+const hrs = h=> h+" ч";
+
+/* ---------- sync: progress lives in Supabase (one row per account), browser storage as offline copy ---------- */
+const CFG = window.BACKLOG_CONFIG || {};
+const sb = (window.supabase && CFG.supabaseUrl && CFG.supabaseAnonKey)
+  ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {auth:{persistSession:true, autoRefreshToken:true}})
+  : null;
+let session = null, saveTimer = null, saving = Promise.resolve(), dirty = false;
+
+function lsGet(){ try{ return JSON.parse(localStorage.getItem("backlog_state")||"null"); }catch(e){ return null; } }
+function lsSet(){ try{ localStorage.setItem("backlog_state", JSON.stringify(state)); }catch(e){} }
+function setSaveMsg(t){ const el=$("#save-state"); if(el) el.textContent = t; }
+function normalize(s){ const r = Object.assign({done:{}, playing:null, swaps:{}, start:"", finish:"", extras:[]}, s||{}); if(!Array.isArray(r.extras)) r.extras=[]; return r; }
+function hasProgress(s){ return !!(s && (Object.keys(s.done||{}).length || (s.extras||[]).length || s.playing || s.start)); }
+
+function persist(){
+  lsSet();
+  if(!sb || !session){ setSaveMsg(sb ? "Войди, чтобы прогресс синхронизировался" : "Прогресс хранится на этом устройстве"); return; }
+  dirty = true;
+  clearTimeout(saveTimer);
+  setSaveMsg("Сохраняю…");
+  saveTimer = setTimeout(()=>{
+    const data = JSON.parse(JSON.stringify(state));
+    saving = saving.then(async()=>{
+      const {error} = await sb.from("progress").upsert({user_id: session.user.id, data, updated_at: new Date().toISOString()});
+      if(error){ setSaveMsg("Не удалось сохранить: "+error.message+". Изменения остались на этом устройстве."); return; }
+      dirty = false; setSaveMsg("Сохранено · "+session.user.email);
+    });
+  }, 500);
+}
+async function pull(){
+  if(!sb || !session || dirty) return;
+  const {data, error} = await sb.from("progress").select("data").eq("user_id", session.user.id).maybeSingle();
+  if(error){ setSaveMsg("Нет связи с сервером. Показан прогресс с этого устройства."); return; }
+  if(data && data.data){ state = normalize(data.data); lsSet(); render(); setSaveMsg("Синхронизировано · "+session.user.email); }
+  else if(hasProgress(state)){ persist(); }
+  else setSaveMsg("Синхронизировано · "+session.user.email);
+}
+async function refresh(){
+  const q = await loadQueue(); if(q){ buildCatalog(q); render(); }
+  await pull();
+}
+window.onAppResume = refresh;
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") refresh(); });
+
+/* ---------- sign-in ---------- */
+function showAuth(show, msg){
+  $("#auth").hidden = !show;
+  $("#auth-msg").textContent = msg||"";
+  $("#account").hidden = show || !session;
+  if(session) $("#account-email").textContent = session.user.email;
+}
+async function authSubmit(mode){
+  const email = $("#auth-email").value.trim(), password = $("#auth-pass").value;
+  if(!email || password.length<6){ $("#auth-msg").textContent = "Введи почту и пароль не короче 6 символов."; return; }
+  $("#auth-msg").textContent = mode==="up" ? "Создаю аккаунт…" : "Вхожу…";
+  const res = mode==="up" ? await sb.auth.signUp({email, password}) : await sb.auth.signInWithPassword({email, password});
+  if(res.error){
+    const m = res.error.message||"";
+    $("#auth-msg").textContent = /Invalid login/i.test(m) ? "Неверная почта или пароль." : /not confirmed/i.test(m) ? "Почта ещё не подтверждена. Открой письмо от Supabase и нажми ссылку." : "Ошибка: "+m;
+    return;
+  }
+  if(mode==="up" && !res.data.session){ $("#auth-msg").textContent = "Готово. Подтверди почту по ссылке из письма, потом нажми «Войти»."; return; }
+  $("#auth-pass").value = "";
+}
+async function initAuth(){
+  if(!sb){ setSaveMsg("Прогресс хранится на этом устройстве"); return; }
+  const {data} = await sb.auth.getSession();
+  session = data.session;
+  sb.auth.onAuthStateChange((_ev, s)=>{ const was = session; session = s; showAuth(!s); if(s && (!was || was.user.id!==s.user.id)) pull(); });
+  showAuth(!session);
+  if(session) pull();
+}
+$("#auth-form").addEventListener("submit",e=>{ e.preventDefault(); authSubmit("in"); });
+$("#auth-signup").addEventListener("click",()=>authSubmit("up"));
+$("#sign-out").addEventListener("click",async()=>{ await sb.auth.signOut(); });
+
+/* ---------- moving progress by hand ---------- */
+$("#export-btn").addEventListener("click",async()=>{
+  const txt = JSON.stringify(state);
+  $("#io-text").value = txt;
+  try{ await navigator.clipboard.writeText(txt); $("#io-msg").textContent = "Скопировано."; }
+  catch(e){ $("#io-text").select(); $("#io-msg").textContent = "Выдели текст и скопируй вручную."; }
+});
+$("#import-btn").addEventListener("click",()=>{
+  try{ const s = JSON.parse($("#io-text").value); if(typeof s!=="object"||!s.done) throw 0; state = normalize(s); persist(); render(); $("#io-msg").textContent = "Прогресс загружен."; }
+  catch(e){ $("#io-msg").textContent = "Не получилось прочитать. Вставь текст целиком."; }
+});
+
+/* ---------- actions ---------- */
+function toggleDone(id, date){
+  if(state.done[id] && !date){ delete state.done[id]; }
+  else{
+    state.done[id] = date || today();
+    if(state.playing===id) state.playing=null;
+    if(!state.start) state.start = earliestDone();
+  }
+  const total = GAMES.length, cnt = Object.keys(state.done).filter(id=>byId[id]).length;
+  if(cnt===total && !state.finish) state.finish = today();
+  if(cnt<total && state.finish && state.finish===latestDone()) {/* keep manual */}
+  persist(); render();
+}
+function earliestDone(){ return Object.values(state.done).sort()[0] || ""; }
+function latestDone(){ const v=Object.values(state.done).sort(); return v[v.length-1]||""; }
+
+/* ---------- active block: any game of the current block can be started ---------- */
+let AVAIL = new Set();
+function activeBlock(){ for(let bi=0;bi<BLOCKS.length;bi++){ if(GAMES.some(g=>g.block===bi && !state.done[g.id])) return bi; } return -1; }
+function availableGames(){
+  const bi = activeBlock(); if(bi<0) return [];
+  const reg = GAMES.filter(g=>g.block===bi && !g.main && !state.done[g.id]);
+  return reg.length ? reg : GAMES.filter(g=>g.block===bi && g.main && !state.done[g.id]);
+}
+function lockMsg(g){
+  if(g.block===activeBlock() && g.main) return "Главное блюдо откроется после остальных игр блока";
+  return "Откроется, когда дойдёшь до блока «"+BLOCKS[g.block].name+"»";
+}
+
+/* ---------- render ---------- */
+function matches(g){
+  if(filters.status==="done" && !state.done[g.id]) return false;
+  if(filters.status==="todo" && state.done[g.id]) return false;
+  if(filters.status==="playing" && state.playing!==g.id) return false;
+  if(filters.cat==="L" && g.dev!=="L") return false;
+  if(filters.cat==="S" && g.dev!=="S") return false;
+  if(filters.cat==="main" && !g.main) return false;
+  if(filters.cat==="short" && g.h>8) return false;
+  if(filters.cat==="long" && g.h<20) return false;
+  if(filters.q){ const q=filters.q.toLowerCase(); if(!titleOf(g).toLowerCase().includes(q) && !g.title.toLowerCase().includes(q)) return false; }
+  return true;
+}
+function gameRow(g){
+  const done = state.done[g.id];
+  const playing = state.playing===g.id;
+  const swapped = state.swaps[g.id];
+  const lk = !done && !AVAIL.has(g.id) ? " locked" : (!done ? " avail" : "");
+  return `<li class="g${done?" done":""}${g.main?" main-dish":""}${lk}" data-id="${g.id}">
+    <button class="chk" data-act="toggle" aria-label="${done?"Снять отметку":"Отметить пройденной"}" aria-pressed="${!!done}">${done?'<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>':""}</button>
+    <div class="name"><span class="t">${g.num?g.num+". ":""}${esc(titleOf(g))}</span>
+      <span class="meta">${swapped?`<span class="swapped-from">${esc(g.title)}</span>`:""}<span>${hrs(g.h)} · ${DEV[g.dev]}</span>${playing?'<span class="tag playing">Играю</span>':""}${done?`<span class="tag dated">${fmtDate(done)}</span>`:""}</span></div>
+    <span></span>
+  </li>`;
+}
+function render(){
+  const availList = availableGames();
+  AVAIL = new Set(availList.map(g=>g.id));
+  $("#start-date").value = state.start||"";
+  $("#finish-date").value = state.finish||"";
+
+  // stats
+  const doneIds = Object.keys(state.done).filter(id=>byId[id]);
+  const total = GAMES.length;
+  const hTotal = GAMES.reduce((a,g)=>a+g.h,0);
+  const hDone = GAMES.filter(g=>state.done[g.id]).reduce((a,g)=>a+g.h,0);
+  const numbered = GAMES.filter(g=>!g.main), mains = GAMES.filter(g=>g.main);
+  $("#stats").innerHTML =
+    `<div class="stat"><b>${numbered.filter(g=>state.done[g.id]).length}<small style="font-size:13px;color:var(--muted)">/${numbered.length}</small></b><span>игр из очереди</span></div>
+     <div class="stat"><b>${mains.filter(g=>state.done[g.id]).length}<small style="font-size:13px;color:var(--muted)">/${mains.length}</small></b><span>главных блюд</span></div>
+     <div class="stat"><b>${hDone}<small style="font-size:13px;color:var(--muted)">/${hTotal} ч</small></b><span>часов пройдено</span></div>`;
+  $("#bar").style.width = (hDone/hTotal*100).toFixed(1)+"%";
+
+  // now playing / next up
+  const pl = state.playing && byId[state.playing];
+  let nowHtml = "";
+  if(pl) nowHtml = `<div class="now"><div><small>Сейчас играю</small><strong>${esc(titleOf(pl))}</strong> <span class="mono" style="color:var(--muted);font-size:12px">${hrs(pl.h)} · ${DEV[pl.dev]}</span></div><button class="btn ok" data-done-now="${pl.id}">Прошёл</button></div>`;
+  else if(availList.length){
+    const bi = activeBlock(), b = BLOCKS[bi];
+    const isMain = availList[0].main;
+    const mainLeft = !isMain && b.main && !state.done["m"+bi];
+    nowHtml = `<div class="now pick"><small>${esc(b.name)} · ${isMain?"осталось главное блюдо":"начни любую"}</small>
+      <div class="pick-list">${availList.map(g=>`<button class="pick-btn" data-play-now="${g.id}">${esc(titleOf(g))}<span>${hrs(g.h)} · ${DEV[g.dev]}</span></button>`).join("")}</div>
+      ${mainLeft?`<span class="pick-note">Потом главное блюдо: ${esc(titleOf(byId["m"+bi]))}</span>`:""}</div>`;
+  }
+  $("#now-box").innerHTML = nowHtml;
+
+  // month
+  const d = new Date(), curKey = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+  const perMonth = {};
+  Object.entries(state.done).forEach(([id,dt])=>{ const k=dt.slice(0,7); (perMonth[k] ||= {c:0,h:0}); perMonth[k].c++; perMonth[k].h += byId[id]?byId[id].h:0; });
+  state.extras.forEach(x=>{ if(!x.date) return; const k=x.date.slice(0,7); (perMonth[k] ||= {c:0,h:0}); perMonth[k].c++; perMonth[k].h += +x.h||0; });
+  const cur = perMonth[curKey]||{c:0,h:0};
+  const keys = Object.keys(perMonth); keys.push(curKey);
+  const sorted = [...new Set(keys)].sort();
+  // fill gaps between first and current month
+  const months=[]; if(sorted.length){ let [y,m]=sorted[0].split("-").map(Number); const [ey,em]=sorted[sorted.length-1].split("-").map(Number);
+    while(y<ey || (y===ey&&m<=em)){ months.push(y+"-"+String(m).padStart(2,"0")); m++; if(m>12){m=1;y++;} } }
+  const show = months.slice(-12);
+  const max = Math.max(1,...show.map(k=>(perMonth[k]||{c:0}).c));
+  const avgBase = months.length; const avg = doneIds.length/avgBase;
+  const left = total - doneIds.length;
+  const eta = avg>0 && left>0 ? Math.ceil(left/avg) : null;
+  $("#month").innerHTML = `<div class="month-head"><h3>В ${MONTHS_FULL[d.getMonth()]}: <span class="mono">${cur.c}</span> ${plural(cur.c,"игра","игры","игр")} · <span class="mono">${cur.h}</span> ч</h3>
+    <small>${doneIds.length? "очередь: в среднем "+avg.toFixed(1)+" в мес."+(eta?" · до финиша ≈ "+eta+" мес.":""):""}</small></div>
+    ${Object.keys(perMonth).length? `<div class="mchart">${show.map(k=>{const v=(perMonth[k]||{c:0}).c;const [yy,mm]=k.split("-");return `<div class="mcol${k===curKey?" cur":""}"><span class="v">${v}</span><div class="b" style="height:${Math.round(v/max*44)}px"></div><span>${MONTHS[+mm-1]}</span></div>`}).join("")}</div>`
+      : `<div class="empty-note">Отметь первую пройденную игру, и здесь появится график по месяцам.</div>`}`;
+
+  // queue
+  let html = "", any = false;
+  BLOCKS.forEach((b,bi)=>{
+    const reg = GAMES.filter(g=>g.block===bi && !g.main && matches(g));
+    const main = GAMES.filter(g=>g.block===bi && g.main && matches(g));
+    if(!reg.length && !main.length) return;
+    any = true;
+    const all = GAMES.filter(g=>g.block===bi);
+    const bd = all.filter(g=>state.done[g.id]).length;
+    html += `<section class="block"><div class="block-head"><h3>${esc(b.name)}</h3><small class="mono">${bd}/${all.length}</small></div>`;
+    if(reg.length) html += `<ul>${reg.map(gameRow).join("")}</ul>`;
+    if(main.length) html += `<p class="sub">Главное блюдо</p><ul>${main.map(gameRow).join("")}</ul>`;
+    html += `</section>`;
+  });
+  $("#queue").innerHTML = any ? html : `<div class="nores">Ничего не найдено</div>`;
+
+  // bench (filtered by search only)
+  const q = filters.q.toLowerCase();
+  const used = new Set([...Object.values(state.swaps), ...state.extras.map(x=>x.title)]);
+  const benchHtml = Object.entries(BENCH).map(([lbl,arr])=>{
+    const list = arr.filter(x=>!used.has(x) && (!q || x.toLowerCase().includes(q)));
+    return list.length? `<p><span class="lbl">${esc(lbl)}:</span> ${list.map(esc).join(", ")}</p>`:"";
+  }).join("");
+  $("#bench").innerHTML = benchHtml || `<p class="lbl">—</p>`;
+  $("#bench-sec").hidden = filters.status!=="all" || filters.cat!=="all" || (!!q && !benchHtml);
+  $("#bench-dl").innerHTML = Object.values(BENCH).flat().filter(x=>!used.has(x)).map(x=>`<option value="${esc(x)}"></option>`).join("");
+
+  // done list: queue games marked done + games added outside the queue, newest first
+  const rows = [
+    ...GAMES.filter(g=>state.done[g.id]).map(g=>({kind:"q", id:g.id, title:titleOf(g), date:state.done[g.id], h:g.h})),
+    ...state.extras.map(x=>({kind:"x", id:x.id, title:x.title, date:x.date, h:x.h})),
+  ].filter(r=>!q || r.title.toLowerCase().includes(q)).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  $("#done-list").innerHTML = rows.length ? rows.map(r=>`<div class="dl" data-${r.kind==="q"?"qid":"xid"}="${r.id}">
+      <div class="name">${esc(r.title)}<div class="meta">${fmtDate(r.date)}${r.h?" · "+r.h+" ч":""}</div></div>
+      <span class="tag ${r.kind==="q"?"dated":"extra"}">${r.kind==="q"?"очередь":"вне очереди"}</span></div>`).join("")
+    : `<div class="empty-note">${q?"Ничего не найдено":"Пройденные игры появятся здесь сами, как только отметишь их."}</div>`;
+  $("#past-sec").hidden = filters.cat!=="all" || filters.status==="todo" || filters.status==="playing";
+}
+function plural(n,a,b,c){ n=Math.abs(n)%100; const n1=n%10; if(n>10&&n<20) return c; if(n1>1&&n1<5) return b; if(n1===1) return a; return c; }
+
+/* ---------- chips ---------- */
+const STATUS = [["all","Все"],["todo","Не пройдено"],["done","Пройдено"],["playing","Играю"]];
+const CATS = [["all","Любые"],["L","Legion Go"],["S","Scar 16"],["main","Главные блюда"],["short","Короткие ≤8 ч"],["long","Длинные 20+ ч"]];
+function chips(el,list,key){
+  el.innerHTML = list.map(([v,l])=>`<button class="chip" data-k="${key}" data-v="${v}" aria-pressed="${filters[key]===v}">${l}</button>`).join("");
+}
+function drawChips(){ chips($("#chips-status"),STATUS,"status"); chips($("#chips-cat"),CATS,"cat"); }
+drawChips();
+document.addEventListener("click",e=>{
+  if(e.target.closest("#sheet-root")) return;
+  const c = e.target.closest(".chip"); if(c){ filters[c.dataset.k]=c.dataset.v; drawChips(); render(); return; }
+  const dn = e.target.closest("[data-done-now]"); if(dn){ toggleDone(dn.dataset.doneNow); return; }
+  const pn = e.target.closest("[data-play-now]"); if(pn){ state.playing = pn.dataset.playNow; if(!state.start) state.start = today(); persist(); render(); return; }
+  const dq = e.target.closest("[data-qid]"); if(dq){ openSheet(dq.dataset.qid); return; }
+  const dx = e.target.closest("[data-xid]"); if(dx){ openExtra(dx.dataset.xid); return; }
+  const row = e.target.closest(".g"); if(!row) return;
+  if(e.target.closest("[data-act=toggle]")){ toggleDone(row.dataset.id); return; }
+  openSheet(row.dataset.id);
+});
+$("#q").addEventListener("input",e=>{ filters.q=e.target.value.trim(); render(); });
+$("#start-date").addEventListener("change",e=>{ state.start=e.target.value; persist(); });
+$("#finish-date").addEventListener("change",e=>{ state.finish=e.target.value; persist(); });
+
+$("#add-date").value = today();
+$("#add-form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const title = $("#add-title").value.trim(); const date = $("#add-date").value || today();
+  const h = parseInt($("#add-hrs").value,10);
+  if(!title) return;
+  state.extras.push({id:"x"+Date.now().toString(36), title, date, h: isNaN(h)?0:h});
+  $("#add-title").value=""; $("#add-hrs").value=""; $("#add-date").value=today();
+  persist(); render();
+});
+function openExtra(xid){
+  const x = state.extras.find(v=>v.id===xid); if(!x) return;
+  const root = $("#sheet-root");
+  root.innerHTML = `<div class="sheet-bg" data-close></div>
+  <div class="sheet" role="dialog" aria-label="${esc(x.title)}">
+    <div><h3>${esc(x.title)}</h3><div class="muted">Пройдено вне очереди</div></div>
+    <div class="add-form" style="border:none;padding:0;background:none">
+      <label class="grow" for="ex-title">Название<input id="ex-title" value="${esc(x.title)}"></label>
+      <label for="ex-date">Дата<input id="ex-date" type="date" value="${x.date||""}"></label>
+      <label for="ex-hrs">Часы<input id="ex-hrs" class="hrs" type="number" min="0" value="${x.h||""}"></label>
+    </div>
+    <div class="row"><button class="btn primary" data-x="save">Сохранить</button><button class="btn" data-x="del">Удалить</button><button class="btn" data-close>Закрыть</button></div>
+    <div class="muted" id="ex-confirm" hidden>Точно удалить? <button class="btn" data-x="del-yes">Да, удалить</button></div>
+  </div>`;
+  root.onclick = e=>{
+    if(e.target.closest("[data-close]")){ root.innerHTML=""; return; }
+    const a = e.target.closest("[data-x]")?.dataset.x; if(!a) return;
+    if(a==="save"){ const t=$("#ex-title").value.trim(); if(t) x.title=t; x.date=$("#ex-date").value||x.date; const h=parseInt($("#ex-hrs").value,10); x.h=isNaN(h)?0:h; persist(); render(); root.innerHTML=""; }
+    if(a==="del"){ $("#ex-confirm").hidden=false; }
+    if(a==="del-yes"){ state.extras = state.extras.filter(v=>v.id!==xid); persist(); render(); root.innerHTML=""; }
+  };
+}
+
+/* ---------- game sheet ---------- */
+function openSheet(id){
+  const g = byId[id]; const done = state.done[id];
+  const used = new Set(Object.values(state.swaps));
+  const benchAll = Object.values(BENCH).flat().filter(x=>!used.has(x));
+  $("#sheet-root").innerHTML = `<div class="sheet-bg" data-close></div>
+  <div class="sheet" role="dialog" aria-label="${esc(titleOf(g))}">
+    <div><h3>${esc(titleOf(g))}</h3><div class="muted">${g.main?"Главное блюдо · ":""}${esc(BLOCKS[g.block].name)} · ${hrs(g.h)} · ${DEV[g.dev]}${state.swaps[id]?` · вместо ${esc(g.title)}`:""}</div></div>
+    <div class="row">
+      ${done? `<button class="btn" data-s="undone">Снять отметку</button>`:`<button class="btn ok" data-s="done">Прошёл сегодня</button>`}
+      ${state.playing===id? `<button class="btn" data-s="stop">Не играю</button>`: (!done ? (AVAIL.has(id)?`<button class="btn primary" data-s="play">Играю сейчас</button>`:`<span class="muted">${esc(lockMsg(g))}</span>`) : "")}
+    </div>
+    <div class="row"><label class="muted" for="sheet-date">Дата прохождения</label><input type="date" id="sheet-date" value="${done||""}"><button class="btn" data-s="setdate">Сохранить дату</button></div>
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">
+      <span class="muted">${state.swaps[id]?"Заменена игрой со скамейки":"Не заходит? Замени игрой со скамейки"}</span>
+      ${state.swaps[id]? `<button class="btn" data-s="unswap">Вернуть ${esc(g.title)}</button>` :
+        `<div class="row">${benchAll.map(b=>`<button class="chip" data-swap="${esc(b)}">${esc(b)}</button>`).join("")}</div>`}
+    </div>
+    <button class="btn" data-close>Закрыть</button>
+  </div>`;
+  const root = $("#sheet-root");
+  root.onclick = e=>{
+    if(e.target.closest("[data-close]")){ root.innerHTML=""; return; }
+    const sw = e.target.closest("[data-swap]");
+    if(sw){ state.swaps[id]=sw.dataset.swap; persist(); render(); openSheet(id); return; }
+    const s = e.target.closest("[data-s]")?.dataset.s; if(!s) return;
+    if(s==="done") toggleDone(id);
+    if(s==="undone"){ delete state.done[id]; persist(); render(); }
+    if(s==="play" && AVAIL.has(id)){ state.playing=id; if(!state.start) state.start=today(); persist(); render(); }
+    if(s==="stop"){ state.playing=null; persist(); render(); }
+    if(s==="unswap"){ delete state.swaps[id]; persist(); render(); openSheet(id); return; }
+    if(s==="setdate"){ const v=$("#sheet-date").value; if(v) toggleDone(id,v); }
+    root.innerHTML="";
+  };
+}
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") $("#sheet-root").innerHTML=""; });
+
+(async()=>{
+  const local = lsGet(); if(local) state = normalize(local);
+  const q = await loadQueue();
+  if(!q){ $("#queue").innerHTML = '<div class="nores">Не удалось загрузить очередь. Проверь интернет и открой приложение снова.</div>'; return; }
+  buildCatalog(q); render(); initAuth();
+})();
+</script>
+</body>
+</html>
