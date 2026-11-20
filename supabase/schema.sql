@@ -11,3 +11,4 @@ drop policy if exists "own progress update" on public.progress;
 create policy "own progress read"   on public.progress for select using (auth.uid() = user_id);
 create policy "own progress insert" on public.progress for insert with check (auth.uid() = user_id);
 create policy "own progress update" on public.progress for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+grant select, insert, update on public.progress to authenticated;
