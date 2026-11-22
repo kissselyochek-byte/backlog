@@ -9,7 +9,7 @@
         {"id":"g2","title":"Wolfenstein: The New Order","h":12,"dev":"L"},
         {"id":"g3","title":"Shadow of Mordor","h":16,"dev":"L"},
         {"id":"g4","title":"Mad Max","h":20,"dev":"L"},
-        {"id":"x-halo-ce","title":"Halo: Combat Evolved","h":8,"dev":"L"},
+        {"id":"x-ac-freedom-cry","title":"Assassin's Creed: Freedom Cry","h":5,"dev":"L"},
         {"id":"x-dmc5","title":"Devil May Cry 5","h":12,"dev":"L"},
         {"id":"g7","title":"Metro 2033 Redux","h":10,"dev":"L"},
         {"id":"g8","title":"Heavy Rain","h":10,"dev":"L"}
@@ -111,7 +111,7 @@
       "main": null
     }
   ],
-  "later": ["Resident Evil 3","Resident Evil 4","Resident Evil 7","Resident Evil Village","Little Nightmares","Little Nightmares II"],
+  "later": ["Resident Evil 3","Resident Evil 4","Resident Evil 7","Resident Evil Village","Little Nightmares","Little Nightmares II","Halo: The Master Chief Collection (вся серия, 6 частей — во второй бэклог)"],
   "bench": {
     "На замену, если что-то из очереди не зайдёт": ["Styx: Blades of Greed","Deus Ex: Mankind Divided","Dead Island 2","The Last of Us Part I","Cuphead","Nine Sols"]
   }
