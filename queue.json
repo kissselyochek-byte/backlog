@@ -95,7 +95,7 @@
         {"id":"g51","title":"Space Marine 2","h":12,"dev":"S"},
         {"id":"g52","title":"Prince of Persia: The Lost Crown","h":20,"dev":"L"},
         {"id":"g53","title":"Mafia: The Old Country","h":12,"dev":"S"},
-        {"id":"g55","title":"Silent Hill 2","h":15,"dev":"S"},
+        {"id":"x-avatar-fop","title":"Avatar: Frontiers of Pandora","h":20,"dev":"S"},
         {"id":"g56","title":"Metro Exodus","h":22,"dev":"S"}
       ],
       "main": {"id":"m6","title":"Baldur's Gate 3","h":75,"dev":"S"}
@@ -111,7 +111,7 @@
       "main": null
     }
   ],
-  "later": ["Resident Evil 3","Resident Evil 4","Resident Evil 7","Resident Evil Village","Little Nightmares","Little Nightmares II","Halo: The Master Chief Collection (вся серия, 6 частей — во второй бэклог)"],
+  "later": ["Resident Evil 3","Resident Evil 4","Resident Evil 7","Resident Evil Village","Little Nightmares","Little Nightmares II","Silent Hill 2","Halo: The Master Chief Collection (вся серия, 6 частей — во второй бэклог)"],
   "bench": {
     "На замену, если что-то из очереди не зайдёт": ["Styx: Blades of Greed","Deus Ex: Mankind Divided","Dead Island 2","The Last of Us Part I","Cuphead","Nine Sols"]
   }
